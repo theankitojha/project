@@ -53,10 +53,30 @@ jobs:
         run: |
           aws ecs describe-services --cluster my-ecs-cluster-dev --services my-app-service-dev --debug
 
+      # - name: Update ECS Service
+      #   run: |
+      #     export AWS_DEBUG=true
+      #     aws ecs update-service --cluster my-ecs-cluster-dev --service my-app-service-dev --force-new-deployment
+
+      - name: Update ECS Task Definition
+        id: ecs_task_definition
+        run: |
+          task_def=$(aws ecs describe-task-definition --task-definition my-app-dev)
+          echo "$task_def" | jq '.taskDefinition.containerDefinitions[0].image="058264339609.dkr.ecr.us-west-2.amazonaws.com/my-app-repo-dev:${{ github.sha }}"' > new-task-definition.json
+          aws ecs register-task-definition --cli-input-json file://new-task-definition.json
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-west-2
+
       - name: Update ECS Service
         run: |
-          export AWS_DEBUG=true
-          aws ecs update-service --cluster my-ecs-cluster-dev --service my-app-service-dev --force-new-deployment
+          latest_task_def_arn=$(aws ecs describe-task-definition --task-definition my-app-dev --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster my-ecs-cluster-dev --service my-app-service-dev --task-definition "$latest_task_def_arn" --force-new-deployment
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-west-2
 
       - name: Verify Deployment
         run: |

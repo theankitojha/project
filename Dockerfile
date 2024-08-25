@@ -8,6 +8,8 @@ RUN npm install
 
 COPY . .
 
+RUN npx eslint .
+
 EXPOSE 3000
 
 CMD ["node", "index.js"]

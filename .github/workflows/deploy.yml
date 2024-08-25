@@ -24,7 +24,7 @@ jobs:
       - name: Push Docker image to ECR
         run: |
           aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 058264339609.dkr.ecr.us-west-2.amazonaws.com/my-app-repo-dev
-          docker tag myapp:${{ github.sha }} <your-ecr-repository-uri>:${{ github.sha }}
+          docker tag myapp:${{ github.sha }} 058264339609.dkr.ecr.us-west-2.amazonaws.com/my-app-repo-dev:${{ github.sha }}
           docker push <your-ecr-repository-uri>:${{ github.sha }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

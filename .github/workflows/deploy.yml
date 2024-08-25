@@ -49,6 +49,9 @@ jobs:
         run: |
           aws --version
 
+      - name: Test Instance Metadata Service
+        run: curl http://169.254.169.254/latest/meta-data/ || echo "Metadata service not reachable"
+
       - name: Describe ECS Service
         run: |
           aws ecs describe-services --cluster my-ecs-cluster-dev --services my-app-service-dev --debug

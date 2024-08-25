@@ -45,24 +45,20 @@ jobs:
           unzip awscliv2.zip
           sudo ./aws/install --update
 
-      # - name: Set up Terraform
-      #   uses: hashicorp/setup-terraform@v2
-      #   with:
-      #     terraform_version: 1.9.5
+      - name: Verify AWS CLI Installation
+        run: |
+          aws --version
 
-      # - name: Terraform Init
-      #   run: terraform init
-      #   working-directory: infra/terraform
-
-      # - name: Terraform Apply
-      #   run: terraform apply -auto-approve
-      #   working-directory: infra/terraform
-      #   env:
-      #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Describe ECS Service
+        run: |
+          aws ecs describe-services --cluster my-ecs-cluster-dev --services my-app-service-dev
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Update ECS Service
         run: |
+          export AWS_DEBUG=true
           aws ecs update-service --cluster my-ecs-cluster-dev --service my-app-service-dev --force-new-deployment
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

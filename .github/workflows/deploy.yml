@@ -37,39 +37,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install or Update AWS CLI
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip curl
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          sudo ./aws/install --update
+      - name: Setup AWS CLI
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
 
       - name: Verify AWS CLI Installation
         run: |
           aws --version
-
-      - name: Test Instance Metadata Service
-        run: curl http://169.254.169.254/latest/meta-data/ || echo "Metadata service not reachable"
+          aws configure list
 
       - name: Describe ECS Service
         run: |
           aws ecs describe-services --cluster my-ecs-cluster-dev --services my-app-service-dev --debug
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Update ECS Service
         run: |
           export AWS_DEBUG=true
           aws ecs update-service --cluster my-ecs-cluster-dev --service my-app-service-dev --force-new-deployment
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Verify Deployment
         run: |
           aws ecs describe-services --cluster my-ecs-cluster-dev --services my-app-service-dev
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

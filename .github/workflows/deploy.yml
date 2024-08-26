@@ -1,0 +1,102 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build Docker image
+        run: docker build -t myapp:${{ github.sha }} .
+
+      - name: Scan Docker image
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:latest image --severity HIGH,CRITICAL myapp:${{ github.sha }}
+
+      - name: Push Docker image to ECR
+        run: |
+          aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 058264339609.dkr.ecr.us-west-2.amazonaws.com/my-app-repo-prod
+          docker tag myapp:${{ github.sha }} 058264339609.dkr.ecr.us-west-2.amazonaws.com/my-app-repo-prod:${{ github.sha }}
+          docker push 058264339609.dkr.ecr.us-west-2.amazonaws.com/my-app-repo-prod:${{ github.sha }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup AWS CLI
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Verify AWS CLI Installation
+        run: |
+          aws --version
+          aws configure list
+
+      - name: Describe ECS Service
+        run: |
+          aws ecs describe-services --cluster my-ecs-cluster-prod --services my-app-service-prod --debug
+
+      # - name: Update ECS Service
+      #   run: |
+      #     export AWS_DEBUG=true
+      #     aws ecs update-service --cluster my-ecs-cluster-dev --service my-app-service-dev --force-new-deployment
+
+      - name: Update ECS Task Definition
+        id: ecs_task_definition
+        run: |
+          sudo apt-get install -y jq
+          
+          # Fetch the current task definition
+          aws ecs describe-task-definition --task-definition my-app-prod --query 'taskDefinition' > task-definition.json
+
+          # Update the image tag and create a new task definition JSON
+          jq '
+            {
+              family: .family,
+              containerDefinitions: .containerDefinitions,
+              executionRoleArn: .executionRoleArn,
+              networkMode: .networkMode,
+              volumes: .volumes,
+              requiresCompatibilities: .requiresCompatibilities,
+              cpu: .cpu,
+              memory: .memory
+            } | .containerDefinitions[0].image = "058264339609.dkr.ecr.us-west-2.amazonaws.com/my-app-repo-prod:${{ github.sha }}"' \
+            task-definition.json > updated-task-definition.json
+
+          # Update the ECS service with the new task definition
+          aws ecs register-task-definition --cli-input-json file://updated-task-definition.json
+          
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-west-2
+
+      - name: Update ECS Service
+        run: |
+          latest_task_def_arn=$(aws ecs describe-task-definition --task-definition my-app-prod --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster my-ecs-cluster-prod --service my-app-service-prod --task-definition "$latest_task_def_arn" --force-new-deployment
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: us-west-2
+
+      - name: Verify Deployment
+        run: |
+          aws ecs describe-services --cluster my-ecs-cluster-prod --services my-app-service-prod
